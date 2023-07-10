@@ -47,7 +47,6 @@ class FastSAM(YOLO):
         overrides['save'] = kwargs.get('save', False)  # do not save by default if called in Python
         self.predictor = FastSAMPredictor(overrides=overrides)
         self.predictor.setup_model(model=self.model, verbose=False)
-
         return self.predictor(source, stream=stream)
 
     def train(self, **kwargs):
