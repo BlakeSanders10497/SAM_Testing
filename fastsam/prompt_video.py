@@ -192,7 +192,7 @@ class FastSAMVideoPrompt:
             
     def plot(self,
              annotations,
-             output,
+             output=None,
              bboxes=None,
              points=None,
              point_label=None,
