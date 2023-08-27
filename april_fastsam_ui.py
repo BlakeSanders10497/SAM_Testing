@@ -17,6 +17,13 @@ import ast
 import torch
 from utils.tools import convert_box_xywh_to_xyxy
 
+
+# create_circle function addition to tkinter
+# source: https://stackoverflow.com/questions/17985216/simpler-way-to-draw-a-circle-with-tkinter
+def _create_circle(self, x, y, r, **kwargs):
+    return self.create_oval(x-r, y-r, x+r, y+r, **kwargs)
+tk.Canvas.create_circle = _create_circle
+
 class App(Frame):
     """ Tkinter application for creating and displaying the water edge detection tool. """
 
@@ -24,6 +31,38 @@ class App(Frame):
         """ Print a debug message if the \'verbose\' argument was passed. """
         if(args.verbose):
             print('[Debug]:', msg)
+
+    def on_left_mouse_button(self, event):
+        """ Event handler to be triggered by pressing the left mouse button. """
+
+        # Check if we clicked on a segment
+        segment_contour = self.check_for_segment(event.x, event.y)
+        if segment_contour is None:
+            self.print_debug(f'no segment found where we clicked /:')
+            return
+
+        # Update the contour
+        self.redraw_contour(segment_contour)
+
+    def redraw_contour(self, contour):
+        """ Deletes the old contour, if any, and draws a new contour on the image canvas. """
+
+        # Tag as temp variable to mitigate typos
+        contour_tag = 'contour'
+
+        # Delete old polygon
+        self.img_canvas.delete(contour_tag)
+
+        # List out contour coordinates like Tk is expecting: [x0, y0, x1, y1, ...]
+        contour_points_list = []
+        for point in contour:
+            contour_points_list.append(point[0][0])
+            contour_points_list.append(point[0][1])
+            
+        # Draw the new polygon
+        self.img_canvas.create_polygon(contour_points_list, outline='green', fill='', width=3, tags=(contour_tag))
+
+        
 
     def browse_files(self):
         """ Spawn a file browser from which the user can select an image. """
@@ -38,10 +77,20 @@ class App(Frame):
 
         self.img_filename.configure(text='Image: '+filename[filename.rfind('/')+1:])
         with Image.open(filename) as img:
+            # Update the image
             self.img = img
             self.tk_img = ImageTk.PhotoImage(img)
-            self.img_view.configure(image=self.tk_img)
+            
+            self.update_canvas_image()
 
+    def update_canvas_image(self):
+        """ Updates the image to display on the Canvas while resizing the Canvas. """
+        # Resize canvas to match the new image
+        self.img_canvas.configure(width=self.tk_img.width(), height=self.tk_img.height())
+
+        # Add image to canvas
+        self.img_canvas.create_image(0, 0, anchor="nw", image=self.tk_img)
+        
     def segment(self):
         """ Begin segmentation on the selected image. """
 
@@ -50,6 +99,7 @@ class App(Frame):
             print("No image has been selected yet! Unable to segment.")
             return
 
+        # Pick a device to run segmentation on
         self.device = torch.device(
             'cuda'  if torch.cuda.is_available() else
             'mps'   if torch.backends.mps.is_available() else
@@ -57,8 +107,7 @@ class App(Frame):
 
         self.print_debug('Segmenting!')
 
-        # Create model
-        #breakpoint()
+        # Create a model and run it on the input image
         model = FastSAM(args.model_path)
         everything_results = model(
             self.img,
@@ -74,17 +123,32 @@ class App(Frame):
         # Return all segments so the user can select one manually
         annotations = prompt_process.everything_prompt()
 
-        # Get output image
-        result = prompt_process.plot(
+        # Get output image and contours for each segment
+        result, self.segment_contours = prompt_process.plot(
             annotations=annotations,
             mask_random_color=args.random_color)
 
         # Display output image
         self.tk_img = ImageTk.PhotoImage(Image.fromarray(result))
-        self.img_view.configure(image=self.tk_img)
+
+        self.update_canvas_image()
 
         self.print_debug('Segmentation complete.')
         return
+
+    def check_for_segment(self, x, y):
+        """ Returns the contour of a segment, if any, at the specified (x, y) coordinate. """
+
+        selected_contour = None
+
+        # Check if we are inside any contour
+        for contour in self.segment_contours:
+            if cv2.pointPolygonTest(contour, (x, y), measureDist=False) >= 0:
+                selected_contour = contour
+                self.print_debug('clicked on a segment!')
+
+        return selected_contour
+
 
     def poly_edit_changed(self):
         """ Respond to polygon editing being enabled or disabled. """
@@ -127,7 +191,7 @@ class App(Frame):
         self.export         = ttk.Button        (self, text='Export to CSV',    command=self.export_to_csv)
 
         # Image display
-        self.img_view       = ttk.Label         (self, text='Image appears here')
+        self.img_canvas     = Canvas            (self)
 
         # Gridding
         self.img_sel        .grid(row=0, column=0, sticky=[N, W, E, S])
@@ -139,13 +203,19 @@ class App(Frame):
         self.edit_latlong   .grid(row=4, column=0, sticky=[N, W, E])
         self.export         .grid(row=5, column=0, sticky=[W, E])
 
-        self.img_view       .grid(row=1, column=1, rowspan=5, columnspan=2)
+        self.img_canvas     .grid(row=1, column=1, rowspan=5, columnspan=2)
+
+
+        # Event handler binding
+        self.img_canvas.bind('<Button-1>',         self.on_left_mouse_button)
+
     
 
 def parse_args():
     """ Use an ArgumentParser to collect arguments into variables. """
     parser = argparse.ArgumentParser()
 
+    # Note that many defaults are taken from FastSAM source code as of the time of cloning their repo.
     parser.add_argument('-d',   '--dark_theme',     type=bool,  default=False,  action=argparse.BooleanOptionalAction)
     parser.add_argument('-v',   '--verbose',        type=bool,  default=False,  action=argparse.BooleanOptionalAction)
     parser.add_argument('-m',   '--model_path',     type=str,   default='./weights/FastSAM-x.pt')
