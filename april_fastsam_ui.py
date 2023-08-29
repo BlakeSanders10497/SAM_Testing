@@ -2,6 +2,7 @@ import argparse
 import os
 import numpy as np
 import cv2
+import csv
 
 # UI requirements
 import tkinter as tk
@@ -166,6 +167,12 @@ class App(Frame):
             # Erase bounding points
             self.img_canvas.delete(self.contour_bounds_tag)
 
+            # Gray out entry box labels
+            self.label_left     .configure(foreground='grey')
+            self.label_right    .configure(foreground='grey')
+            self.label_top      .configure(foreground='grey')
+            self.label_bottom   .configure(foreground='grey')
+
             # Disable latlong entry boxes
             self.entry_left     .configure(state='disabled')
             self.entry_right    .configure(state='disabled')
@@ -182,13 +189,17 @@ class App(Frame):
 
         self.draw_bound_points()
 
+        # Gray out entry box labels
+        self.label_left     .configure(foreground='black')
+        self.label_right    .configure(foreground='black')
+        self.label_top      .configure(foreground='black')
+        self.label_bottom   .configure(foreground='black')
+
         # Enable latlong entry boxes
         self.entry_left     .configure(state='enabled')
         self.entry_right    .configure(state='enabled')
         self.entry_top      .configure(state='enabled')
         self.entry_bottom   .configure(state='enabled')
-
-        pass
 
     def draw_bound_points(self):
         """ Draw left/right/top/bottom points for the selected contour. """
@@ -218,23 +229,89 @@ class App(Frame):
         self.img_canvas.create_circle(top   [0][0], top     [0][1], bounds_radius, outline=bounds_outline, fill=bounds_fill, tags=(self.contour_bounds_tag))
         self.img_canvas.create_circle(bottom[0][0], bottom  [0][1], bounds_radius, outline=bounds_outline, fill=bounds_fill, tags=(self.contour_bounds_tag))
 
-        pass
-    
-    def export_to_csv(self):
-        """ Export the selected segment's polygon as lat-long points to a CSV file. """
-        self.print_debug('exporting!')
-        pass
+        # Store bounds for use during exporting
+        self.contour_bounds = [left[0][0], right[0][0],   # left_x, right_x,
+                                top[0][1], bottom[0][1]]  # top_y, bottom_y
 
-    def validate_entry_input(self, text):
+    def xy_to_latlong(self):
+        """ Generate a list of latitude/longitude points from the selected contour and bounds input by the user. """
+        
+        # x/y pixel coordinate boundaries (retrieved from contour)
+        left_x      = self.contour_bounds[0]
+        right_x     = self.contour_bounds[1]
+        top_y       = self.contour_bounds[2]
+        bottom_y    = self.contour_bounds[3]
+
+        # lat/long coordinate boundaries (input by user)
+        long_left   = float(self.entry_left   .get())
+        long_right  = float(self.entry_right  .get())
+        lat_top     = float(self.entry_top    .get())
+        lat_bottom  = float(self.entry_bottom .get())
+
+        latlong_points = []
+
+        for point in self.segment_contour:
+            point_scaled = [
+                (point[0][0]-left_x)/(right_x-left_x),
+                (point[0][1]-top_y)/(bottom_y-top_y)]
+
+            point_latlong = [
+                long_left   + point_scaled[0]*(long_right - long_left),
+                lat_top     - point_scaled[1]*(lat_top - lat_bottom)]
+
+            latlong_points.append(point_latlong)
+
+        return latlong_points
+
+    def validate_entry_inputs(self):
         """ Verifies that text entries can be converted to floats. """
 
         try:
-            float(text)
-            self.print_debug('valid text')
-            return True
+            float(self.entry_left.get())
         except ValueError:
-            self.print_debug('invalid text!!')
+            print('longitude left is invalid.')
             return False
+
+        try:
+            float(self.entry_right.get())
+        except ValueError:
+            print('longitude right is invalid.')
+            return False
+
+        try:
+            float(self.entry_top.get())
+        except ValueError:
+            print('latitude top is invalid.')
+            return False
+
+        try:
+            float(self.entry_bottom.get())
+        except ValueError:
+            print('latitude bottom is invalid.')
+            return False
+        
+        return True
+    
+    def export_to_csv(self):
+        """ Exports the selected segment's polygon as lat-long points to a CSV file. """
+
+        if not self.validate_entry_inputs():
+            return
+        
+        self.print_debug('exporting!')
+
+        # Generate lat/long points
+        latlong_points = self.xy_to_latlong()
+
+        # Write output to a CSV file
+        with open(args.output_filename, 'w', encoding='UTF-8', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+
+            writer.writerow(['Latitude', 'Longitude'])
+            for point in latlong_points:
+                writer.writerow([point[1], point[0]])
+
+        self.print_debug('export complete.')
 
     
     def __init__(self, root):
@@ -264,19 +341,20 @@ class App(Frame):
         self.grid_columnconfigure(1, weight=1)
 
 
-        # number validation for entry boxes
-        validate_command = self.register(self.validate_entry_input)
-
         # Menu frame
         self.btn_sel_img    = ttk.Button        (self.frame_menu, text='Select image file', command=self.browse_files)
         self.btn_segment    = ttk.Button        (self.frame_menu, text='Segment Image',     command=self.segment)
         self.edit_label     = ttk.Label         (self.frame_menu, text='Edit:')
         self.edit_polygon   = ttk.Checkbutton   (self.frame_menu, text='Bounding polygon',  command=self.poly_edit_changed,     variable=self.allow_edit_poly)
         self.edit_latlong   = ttk.Checkbutton   (self.frame_menu, text='Lat-long points',   command=self.latlong_edit_changed,  variable=self.allow_edit_latlong)
-        self.entry_left     = ttk.Entry         (self.frame_menu, text='Longitude - Left',      validate='key',                 validatecommand=(validate_command, '%P'), state='disabled')
-        self.entry_right    = ttk.Entry         (self.frame_menu, text='Longitude - Right',     validate='key',                 validatecommand=(validate_command, '%P'), state='disabled')
-        self.entry_top      = ttk.Entry         (self.frame_menu, text='Latitude - Top',        validate='key',                 validatecommand=(validate_command, '%P'), state='disabled')
-        self.entry_bottom   = ttk.Entry         (self.frame_menu, text='Latitude - Bottom',     validate='key',                 validatecommand=(validate_command, '%P'), state='disabled')
+        self.label_left     = ttk.Label         (self.frame_menu, text='Longitude - Left',      foreground='grey')
+        self.entry_left     = ttk.Entry         (self.frame_menu, state='disabled')
+        self.label_right    = ttk.Label         (self.frame_menu, text='Longitude - Right',     foreground='grey')
+        self.entry_right    = ttk.Entry         (self.frame_menu, state='disabled')
+        self.label_top      = ttk.Label         (self.frame_menu, text='Latitude - Top',        foreground='grey')
+        self.entry_top      = ttk.Entry         (self.frame_menu, state='disabled')
+        self.label_bottom   = ttk.Label         (self.frame_menu, text='Longitude - Bottom',    foreground='grey')
+        self.entry_bottom   = ttk.Entry         (self.frame_menu, state='disabled')
         self.export         = ttk.Button        (self.frame_menu, text='Export to CSV',     command=self.export_to_csv)
 
         # Status frame
@@ -290,20 +368,24 @@ class App(Frame):
         menu_padx        = 5
         menu_pady_short  = 2
         menu_pady_long   = 5
-        self.btn_sel_img    .grid(row=0, column=0, padx=menu_padx, pady=menu_pady_short,    sticky='nsew')
-        self.btn_segment    .grid(row=1, column=0, padx=menu_padx, pady=menu_pady_short,    sticky='nsew')
-        self.edit_label     .grid(row=2, column=0, padx=menu_padx, pady=menu_pady_long,     sticky='nsew')
-        self.edit_polygon   .grid(row=3, column=0, padx=menu_padx, pady=menu_pady_long,     sticky='nsew')
-        self.edit_latlong   .grid(row=4, column=0, padx=menu_padx, pady=menu_pady_long,     sticky='nsew')
-        self.entry_left     .grid(row=5, column=0, padx=menu_padx, pady=menu_pady_long,     sticky='nsew')
-        self.entry_right    .grid(row=6, column=0, padx=menu_padx, pady=menu_pady_long,     sticky='nsew')
-        self.entry_top      .grid(row=7, column=0, padx=menu_padx, pady=menu_pady_long,     sticky='nsew')
-        self.entry_bottom   .grid(row=8, column=0, padx=menu_padx, pady=menu_pady_long,     sticky='nsew')
-        self.export         .grid(row=9, column=0, padx=menu_padx, pady=menu_pady_long,     sticky='nsew')
+        self.btn_sel_img    .grid(row=0,    column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
+        self.btn_segment    .grid(row=1,    column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
+        self.edit_label     .grid(row=2,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.edit_polygon   .grid(row=3,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.edit_latlong   .grid(row=4,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.label_left     .grid(row=5,    column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
+        self.entry_left     .grid(row=6,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.label_right    .grid(row=7,    column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
+        self.entry_right    .grid(row=8,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.label_top      .grid(row=9,    column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
+        self.entry_top      .grid(row=10,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.label_bottom   .grid(row=11,   column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
+        self.entry_bottom   .grid(row=12,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.export         .grid(row=13,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
 
         # Gridding - status frame
         self.status         .grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
-        self.img_filename   .grid(row=0, column=1, padx=5, pady=5, sticky='nse')
+        self.img_filename   .grid(row=0, column=1, padx=10, pady=5, sticky='nse')
 
         self.frame_status.rowconfigure(0, weight=1)
         self.frame_status.columnconfigure(1, weight=1)
@@ -330,6 +412,7 @@ def parse_args():
     parser.add_argument(        '--conf',           type=float, default=0.4)
     parser.add_argument(        '--iou',            type=float, default=0.9)
     parser.add_argument(        '--random_color',   type=bool,  default=True,   action=argparse.BooleanOptionalAction)
+    parser.add_argument('-o',   '--output_filename', type=str,  default='output.csv')
 
     return parser.parse_args()
 
