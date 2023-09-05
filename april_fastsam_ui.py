@@ -1,3 +1,4 @@
+from enum import Enum
 import argparse
 import os
 import numpy as np
@@ -25,14 +26,85 @@ def _create_circle(self, x, y, r, **kwargs):
     return self.create_oval(x-r, y-r, x+r, y+r, **kwargs)
 tk.Canvas.create_circle = _create_circle
 
+
+# Current state of the app, which drives what is enabled/disabled in the UI,
+#   as well as the status message at the top of the app window.
+AppState = Enum('AppState', ['IMAGE_SELECT',
+                               'IMAGE_SEGMENT', 
+                               'CONTOUR_SELECT',
+                               'CONTOUR_EDIT'])
 class App(Frame):
     """ Tkinter application for creating and displaying the water edge detection tool. """
-
 
     def print_debug(self, msg):
         """ Print a debug message if the \'verbose\' argument was passed. """
         if(args.verbose):
             print('[Debug]:', msg)
+
+    def disable_menu_options(self):
+        """ Disable all UI options except for opening a new image. """
+
+        self.btn_segment    .config(state='disabled') 
+        self.check_polygon  .config(state='disabled') 
+        self.check_latlong  .config(state='disabled') 
+        self.entry_left     .config(state='disabled') 
+        self.entry_right    .config(state='disabled') 
+        self.entry_top      .config(state='disabled') 
+        self.entry_bottom   .config(state='disabled') 
+        self.export         .config(state='disabled') 
+        
+        self.label_edit     .config(foreground='grey') 
+        self.label_left     .config(foreground='grey') 
+        self.label_right    .config(foreground='grey') 
+        self.label_top      .config(foreground='grey') 
+        self.label_bottom   .config(foreground='grey') 
+
+    def enable_img_options(self):
+        """ Enable UI checkboxes and edit label. """
+
+        self.check_polygon  .config(state='enabled') 
+        self.check_latlong  .config(state='enabled') 
+        self.export         .config(state='enabled') 
+
+        self.label_edit     .config(foreground='black') 
+
+    def set_segmenting_state(self, new_state):
+        """ Update the state of the segmenting button. Just a wrapper for readability purposes. """
+
+        self.btn_segment.config(state=new_state) 
+
+    def update_state(self, new_state):
+        """ Update the state of the app and perform any resulting changes to the UI. """
+
+        # Update the class member
+        self.app_state = new_state
+
+        # Temp variable to hold status message
+        status_msg = ''
+
+        # Perform any actions required by the new state
+        if new_state == AppState.IMAGE_SELECT:
+            status_msg = 'Open an image'
+            self.disable_menu_options()
+
+        elif new_state == AppState.IMAGE_SEGMENT:
+            status_msg = 'Segment the image, or select a new image'
+            self.set_segmenting_state('enabled')
+
+        elif new_state == AppState.CONTOUR_SELECT:
+            status_msg = 'Select a contour, or select a new image'
+            self.set_segmenting_state('disabled')
+
+        elif new_state == AppState.CONTOUR_EDIT:
+            status_msg = 'Edit the selected contour, select a new contour, export the contour to CSV, or select a new image'
+            self.enable_img_options()
+
+        else:
+            self.print_debug(f'State {new_state} has not been accounted for in update_state!')
+
+        # Update status message
+        self.label_status.configure(text=status_msg)
+
 
     def on_left_mouse_button(self, event):
         """ Event handler to be triggered by pressing the left mouse button. """
@@ -40,11 +112,13 @@ class App(Frame):
         # Check if we clicked on a segment
         self.segment_contour = self.check_for_segment(event.x, event.y)
         if self.segment_contour is None:
-            self.print_debug(f'no segment found where we clicked /:')
             return
 
+        
         # Update the contour
         self.redraw_contour()
+
+        self.update_state(AppState.CONTOUR_EDIT)
 
     def redraw_contour(self):
         """ Deletes the old contour, if any, and draws a new contour on the image canvas. """
@@ -72,13 +146,15 @@ class App(Frame):
             self.print_debug('no file selected.')
             return
 
-        self.img_filename.configure(text='Image: '+filename[filename.rfind('/')+1:])
+        self.img_filename.configure(text='Image: '+ filename[filename.rfind('/')+1:])
         with Image.open(filename) as img:
             # Update the image
             self.img = img
             self.tk_img = ImageTk.PhotoImage(img)
             
             self.update_canvas_image()
+
+            self.update_state(AppState.IMAGE_SEGMENT)
 
     def update_canvas_image(self):
         """ Updates the image to display on the Canvas while resizing the Canvas. """
@@ -129,6 +205,8 @@ class App(Frame):
         self.tk_img = ImageTk.PhotoImage(Image.fromarray(result))
 
         self.update_canvas_image()
+        
+        self.update_state(AppState.CONTOUR_SELECT)
 
         self.print_debug('Segmentation complete.')
         return
@@ -152,7 +230,37 @@ class App(Frame):
         editing_enabled = self.allow_edit_poly.get()
         state_msg = 'Polygon editing ' + ('enabled' if editing_enabled else 'disabled')
         self.print_debug(state_msg)
-        pass
+        return
+
+    def disable_latlong_entry(self):
+        """ Grey out labels and disable entry fields for lat/long points. """
+
+        # Gray out entry box labels
+        self.label_left     .configure(foreground='grey')
+        self.label_right    .configure(foreground='grey')
+        self.label_top      .configure(foreground='grey')
+        self.label_bottom   .configure(foreground='grey')
+
+        # Disable latlong entry boxes
+        self.entry_left     .configure(state='disabled')
+        self.entry_right    .configure(state='disabled')
+        self.entry_top      .configure(state='disabled')
+        self.entry_bottom   .configure(state='disabled')
+
+    def enable_latlong_entry(self):
+        """ Revert greying out of labels and enable entry fields for lat/long points. """
+        # Gray out entry box labels
+        self.label_left     .configure(foreground='black')
+        self.label_right    .configure(foreground='black')
+        self.label_top      .configure(foreground='black')
+        self.label_bottom   .configure(foreground='black')
+
+        # Enable latlong entry boxes
+        self.entry_left     .configure(state='enabled')
+        self.entry_right    .configure(state='enabled')
+        self.entry_top      .configure(state='enabled')
+        self.entry_bottom   .configure(state='enabled')
+
 
     def latlong_edit_changed(self):
         """ Respond to lat-long editing being enabled or disabled. """
@@ -167,17 +275,7 @@ class App(Frame):
             # Erase bounding points
             self.img_canvas.delete(self.contour_bounds_tag)
 
-            # Gray out entry box labels
-            self.label_left     .configure(foreground='grey')
-            self.label_right    .configure(foreground='grey')
-            self.label_top      .configure(foreground='grey')
-            self.label_bottom   .configure(foreground='grey')
-
-            # Disable latlong entry boxes
-            self.entry_left     .configure(state='disabled')
-            self.entry_right    .configure(state='disabled')
-            self.entry_top      .configure(state='disabled')
-            self.entry_bottom   .configure(state='disabled')
+            self.disable_latlong_entry()
 
             return
 
@@ -189,17 +287,7 @@ class App(Frame):
 
         self.draw_bound_points()
 
-        # Gray out entry box labels
-        self.label_left     .configure(foreground='black')
-        self.label_right    .configure(foreground='black')
-        self.label_top      .configure(foreground='black')
-        self.label_bottom   .configure(foreground='black')
-
-        # Enable latlong entry boxes
-        self.entry_left     .configure(state='enabled')
-        self.entry_right    .configure(state='enabled')
-        self.entry_top      .configure(state='enabled')
-        self.entry_bottom   .configure(state='enabled')
+        self.enable_latlong_entry()
 
     def draw_bound_points(self):
         """ Draw left/right/top/bottom points for the selected contour. """
@@ -318,13 +406,15 @@ class App(Frame):
         ttk.Frame.__init__(self, root)
         self.pack()
 
-        self.winfo_toplevel().title('APRILab Water Body Detection Tool (one day maybe lol)')
+        self.winfo_toplevel().title('APRILab Water Body Detection Tool')
 
         # Canvas element tags as variables to mitigate typos
         self.contour_tag        = 'contour'
         self.contour_bounds_tag = 'bounds'
 
         # State variables
+        self.app_state = AppState(AppState.IMAGE_SELECT)
+
         self.allow_edit_poly    = tk.BooleanVar(value=False)
         self.allow_edit_latlong = tk.BooleanVar(value=False)
 
@@ -344,9 +434,9 @@ class App(Frame):
         # Menu frame
         self.btn_sel_img    = ttk.Button        (self.frame_menu, text='Select image file', command=self.browse_files)
         self.btn_segment    = ttk.Button        (self.frame_menu, text='Segment Image',     command=self.segment)
-        self.edit_label     = ttk.Label         (self.frame_menu, text='Edit:')
-        self.edit_polygon   = ttk.Checkbutton   (self.frame_menu, text='Bounding polygon',  command=self.poly_edit_changed,     variable=self.allow_edit_poly)
-        self.edit_latlong   = ttk.Checkbutton   (self.frame_menu, text='Lat-long points',   command=self.latlong_edit_changed,  variable=self.allow_edit_latlong)
+        self.label_edit     = ttk.Label         (self.frame_menu, text='Edit:')
+        self.check_polygon  = ttk.Checkbutton   (self.frame_menu, text='Bounding polygon',  command=self.poly_edit_changed,     variable=self.allow_edit_poly)
+        self.check_latlong  = ttk.Checkbutton   (self.frame_menu, text='Lat-long points',   command=self.latlong_edit_changed,  variable=self.allow_edit_latlong)
         self.label_left     = ttk.Label         (self.frame_menu, text='Longitude - Left',      foreground='grey')
         self.entry_left     = ttk.Entry         (self.frame_menu, state='disabled')
         self.label_right    = ttk.Label         (self.frame_menu, text='Longitude - Right',     foreground='grey')
@@ -358,7 +448,7 @@ class App(Frame):
         self.export         = ttk.Button        (self.frame_menu, text='Export to CSV',     command=self.export_to_csv)
 
         # Status frame
-        self.status         = ttk.Label         (self.frame_status, text='Open an image')
+        self.label_status   = ttk.Label         (self.frame_status, text='Open an image')
         self.img_filename   = ttk.Label         (self.frame_status, text='Image file name displays here')
 
         # Canvas frame
@@ -370,9 +460,9 @@ class App(Frame):
         menu_pady_long   = 5
         self.btn_sel_img    .grid(row=0,    column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
         self.btn_segment    .grid(row=1,    column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
-        self.edit_label     .grid(row=2,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
-        self.edit_polygon   .grid(row=3,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
-        self.edit_latlong   .grid(row=4,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.label_edit     .grid(row=2,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.check_polygon  .grid(row=3,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.check_latlong  .grid(row=4,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
         self.label_left     .grid(row=5,    column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
         self.entry_left     .grid(row=6,    column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
         self.label_right    .grid(row=7,    column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
@@ -384,7 +474,7 @@ class App(Frame):
         self.export         .grid(row=13,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
 
         # Gridding - status frame
-        self.status         .grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
+        self.label_status   .grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
         self.img_filename   .grid(row=0, column=1, padx=10, pady=5, sticky='nse')
 
         self.frame_status.rowconfigure(0, weight=1)
@@ -393,9 +483,11 @@ class App(Frame):
         # Gridding - canvas frame
         self.img_canvas     .grid(row=0, column=0)
 
-
         # Event handler binding
         self.img_canvas.bind('<Button-1>',         self.on_left_mouse_button)
+
+        # Trigger UI update for initial state
+        self.update_state(self.app_state)
 
     
 
