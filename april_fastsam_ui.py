@@ -21,7 +21,7 @@ from utils.tools import convert_box_xywh_to_xyxy
 
 
 # create_circle function addition to tkinter
-# source: https://stackoverflow.com/questions/17985216/simpler-way-to-draw-a-circle-with-tkinter
+# Source: https://stackoverflow.com/questions/17985216/simpler-way-to-draw-a-circle-with-tkinter
 def _create_circle(self, x, y, r, **kwargs):
     return self.create_oval(x-r, y-r, x+r, y+r, **kwargs)
 tk.Canvas.create_circle = _create_circle
@@ -109,16 +109,36 @@ class App(Frame):
     def on_left_mouse_button(self, event):
         """ Event handler to be triggered by pressing the left mouse button. """
 
-        # Check if we clicked on a segment
-        self.segment_contour = self.check_for_segment(event.x, event.y)
-        if self.segment_contour is None:
-            return
+        if self.app_state == AppState.CONTOUR_SELECT:
+            # Check if we clicked on a segment
+            segment_contour_full = self.check_for_segment(event.x, event.y)
+            if segment_contour_full is None:
+                return
 
-        
-        # Update the contour
-        self.redraw_contour()
+            # Simplify contour before drawing and storing
+            # Reference: https://stackoverflow.com/questions/41879315/opencv-visualize-polygonal-curves-extracted-with-cv2-approxpolydp
+            epsilon = (2e-3)*cv2.arcLength(segment_contour_full, True)
+            self.segment_contour = cv2.approxPolyDP(segment_contour_full, epsilon, True)
 
-        self.update_state(AppState.CONTOUR_EDIT)
+            self.print_debug(f'Simplified: {self.segment_contour.shape[0]} points')
+            self.print_debug(f'Original: {segment_contour_full.shape[0]} points')
+            
+            # Update the contour on the canvas
+            self.redraw_contour()
+
+            self.update_state(AppState.CONTOUR_EDIT)
+
+        elif self.app_state == AppState.CONTOUR_EDIT:
+            # Make sure we are actively editing the polygon
+            if not self.allow_edit_poly.get():
+                return
+
+            # Check if we click on a contour point
+            point, point_index = self.check_for_contour_point(event.x, event.y)
+
+    def on_left_mouse_release(self, event):
+
+        pass
 
     def redraw_contour(self):
         """ Deletes the old contour, if any, and draws a new contour on the image canvas. """
@@ -220,22 +240,36 @@ class App(Frame):
         for contour in self.segment_contour_list:
             if cv2.pointPolygonTest(contour, (x, y), measureDist=False) >= 0:
                 selected_contour = contour
+                break
 
         return selected_contour
 
+    def check_for_contour_point(self, x, y):
+        """ Returns the point and index within the currently selected 
+            contour, if any, at the specified (x, y) coordinate. """
 
-    def poly_edit_changed(self):
-        """ Respond to polygon editing being enabled or disabled. """
+        selected_point = None
+        point_index = -1
 
-        editing_enabled = self.allow_edit_poly.get()
-        state_msg = 'Polygon editing ' + ('enabled' if editing_enabled else 'disabled')
-        self.print_debug(state_msg)
-        return
+        # Check if we clicked on a point
+        for i, point in enumerate(self.segment_contour):
+            #breakpoint()
+
+            # L2 norm to calculate Euclidean distance between the click and contour point
+            if cv2.norm(src1=np.array([[x,y]]), src2=point, normType=cv2.NORM_L2) < self.contour_point_radius:
+                selected_point = point
+                point_index = i
+                
+                self.print_debug(f'clicked on point {point_index} at ({selected_point[0][0], selected_point[0][1]})')
+                break
+
+        return selected_point, point_index
+
 
     def disable_latlong_entry(self):
         """ Grey out labels and disable entry fields for lat/long points. """
 
-        # Gray out entry box labels
+        # Grey out entry box labels
         self.label_left     .configure(foreground='grey')
         self.label_right    .configure(foreground='grey')
         self.label_top      .configure(foreground='grey')
@@ -249,7 +283,7 @@ class App(Frame):
 
     def enable_latlong_entry(self):
         """ Revert greying out of labels and enable entry fields for lat/long points. """
-        # Gray out entry box labels
+        # Revert greying out of entry box labels
         self.label_left     .configure(foreground='black')
         self.label_right    .configure(foreground='black')
         self.label_top      .configure(foreground='black')
@@ -261,6 +295,31 @@ class App(Frame):
         self.entry_top      .configure(state='enabled')
         self.entry_bottom   .configure(state='enabled')
 
+
+    def poly_edit_changed(self):
+        """ Respond to polygon editing being enabled or disabled. """
+
+        editing_enabled = self.allow_edit_poly.get()
+        state_msg = 'Polygon editing ' + ('enabled' if editing_enabled else 'disabled')
+        self.print_debug(state_msg)
+
+        # Check if we deselected
+        if not editing_enabled:
+            # Clear polygon point tags
+            self.img_canvas.delete(self.contour_points_tag)
+            return
+
+        # Disable latlong editing
+        self.disable_latlong_entry()
+
+        # Clear any drawn latlong points
+        self.img_canvas.delete(self.contour_bounds_tag)
+
+        # Draw the contour points
+        for point in self.segment_contour:
+            self.img_canvas.create_circle(x=point[0][0], y=point[0][1], r=self.contour_point_radius, fill='blue', outline='white', tags=self.contour_points_tag)
+
+        return
 
     def latlong_edit_changed(self):
         """ Respond to lat-long editing being enabled or disabled. """
@@ -411,6 +470,10 @@ class App(Frame):
         # Canvas element tags as variables to mitigate typos
         self.contour_tag        = 'contour'
         self.contour_bounds_tag = 'bounds'
+        self.contour_points_tag = 'points'
+
+        # UI Constants
+        self.contour_point_radius = 5
 
         # State variables
         self.app_state = AppState(AppState.IMAGE_SELECT)
