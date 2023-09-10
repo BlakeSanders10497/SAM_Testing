@@ -133,12 +133,38 @@ class App(Frame):
             if not self.allow_edit_poly.get():
                 return
 
-            # Check if we click on a contour point
-            point, point_index = self.check_for_contour_point(event.x, event.y)
+    def point_drag_start(self, event):
+        """ Start dragging a point in the contour that is currently being edited. """
+        # Determine which point we clicked on
+        self._clicked_point, self._clicked_point_index = self.check_for_contour_point(event.x, event.y)
 
-    def on_left_mouse_release(self, event):
+        # Get its canvas ID
+        self._clicked_point_canvas_id = self.img_canvas.find_withtag('current')[0]
 
-        pass
+        # Capture initial position
+        self._prev_x = event.x
+        self._prev_y = event.y
+        self.print_debug(f'Drag start! ({event.x}, {event.y})')
+
+    def point_drag_motion(self, event):
+        """ Drag a point in the contour that is currently being edited. """
+        dx = event.x - self._prev_x
+        dy = event.y - self._prev_y
+
+        self._prev_x = event.x
+        self._prev_y = event.y
+
+        self.img_canvas.move(self._clicked_point_canvas_id, dx, dy)
+        self.print_debug(f'Point {self._clicked_point_index}, id {self._clicked_point_canvas_id} update: ({event.x}, {event.y})')
+
+    def point_drag_end(self, event):
+        """ Update and redraw the contour that is currently being edited. """
+        self._clicked_point[0][0] = event.x
+        self._clicked_point[0][1] = event.y
+        self.print_debug(f'point {self._clicked_point_index} released at {event.x}, {event.y}')
+
+        self.redraw_contour()
+
 
     def redraw_contour(self):
         """ Deletes the old contour, if any, and draws a new contour on the image canvas. """
@@ -547,7 +573,10 @@ class App(Frame):
         self.img_canvas     .grid(row=0, column=0)
 
         # Event handler binding
-        self.img_canvas.bind('<Button-1>',         self.on_left_mouse_button)
+        self.img_canvas.bind('<Button-1>', self.on_left_mouse_button)
+        self.img_canvas.tag_bind(self.contour_points_tag, '<Button-1>', self.point_drag_start)
+        self.img_canvas.tag_bind(self.contour_points_tag, '<B1-Motion>', self.point_drag_motion)
+        self.img_canvas.tag_bind(self.contour_points_tag, '<ButtonRelease-1>', self.point_drag_end)
 
         # Trigger UI update for initial state
         self.update_state(self.app_state)
