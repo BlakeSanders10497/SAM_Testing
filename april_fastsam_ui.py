@@ -51,7 +51,7 @@ class App(Frame):
         self.entry_right    .config(state='disabled') 
         self.entry_top      .config(state='disabled') 
         self.entry_bottom   .config(state='disabled') 
-        self.export         .config(state='disabled') 
+        self.btn_export     .config(state='disabled') 
         
         self.label_edit     .config(foreground='grey') 
         self.label_left     .config(foreground='grey') 
@@ -64,7 +64,7 @@ class App(Frame):
 
         self.check_polygon  .config(state='enabled') 
         self.check_latlong  .config(state='enabled') 
-        self.export         .config(state='enabled') 
+        self.btn_export     .config(state='enabled') 
 
         self.label_edit     .config(foreground='black') 
 
@@ -161,7 +161,9 @@ class App(Frame):
         """ Update and redraw the contour that is currently being edited. """
         self._clicked_point[0][0] = event.x
         self._clicked_point[0][1] = event.y
-        self.print_debug(f'point {self._clicked_point_index} released at {event.x}, {event.y}')
+
+
+        self.print_debug(f'point {self._clicked_point_index}, id {self._clicked_point_canvas_id} released at {event.x}, {event.y}')
 
         self.redraw_contour()
 
@@ -177,9 +179,20 @@ class App(Frame):
         for point in self.segment_contour:
             contour_points_list.append(point[0][0])
             contour_points_list.append(point[0][1])
-            
+
         # Draw the new polygon
         self.img_canvas.create_polygon(contour_points_list, outline='green', fill='', width=3, tags=(self.contour_tag))
+
+        # If we are editing the contour, redraw the contour points
+        if self.allow_edit_poly.get():
+            self.redraw_contour_points()
+
+    def redraw_contour_points(self):
+        self.img_canvas.delete(self.contour_points_tag)
+
+        # Draw the contour points
+        for point in self.segment_contour:
+            self.img_canvas.create_circle(x=point[0][0], y=point[0][1], r=self.contour_point_radius, fill='blue', outline='white', tags=self.contour_points_tag)
 
     def browse_files(self):
         """ Spawn a file browser from which the user can select an image. """
@@ -219,7 +232,7 @@ class App(Frame):
             return
 
         # Pick a device to run segmentation on
-        self.device = torch.device(
+        device = torch.device(
             'cuda'  if torch.cuda.is_available() else
             'mps'   if torch.backends.mps.is_available() else
             'cpu')
@@ -230,14 +243,14 @@ class App(Frame):
         model = FastSAM(args.model_path)
         everything_results = model(
             self.img,
-            device=self.device,
+            device=device,
             retina_masks=args.retina,
             imgsz=args.imgsz,
             conf=args.conf,
             iou=args.iou)
 
         # Create a prompt receiver that acts on the selected image
-        prompt_process = FastSAMVideoPrompt(np.array(self.img), everything_results, device=self.device)
+        prompt_process = FastSAMVideoPrompt(np.array(self.img), everything_results, device=device)
 
         # Return all segments so the user can select one manually
         annotations = prompt_process.everything_prompt()
@@ -279,7 +292,6 @@ class App(Frame):
 
         # Check if we clicked on a point
         for i, point in enumerate(self.segment_contour):
-            #breakpoint()
 
             # L2 norm to calculate Euclidean distance between the click and contour point
             if cv2.norm(src1=np.array([[x,y]]), src2=point, normType=cv2.NORM_L2) < self.contour_point_radius:
@@ -486,7 +498,9 @@ class App(Frame):
 
         self.print_debug('export complete.')
 
-    
+    def trigger_breakpoint(self):
+        breakpoint()
+
     def __init__(self, root):
         ttk.Frame.__init__(self, root)
         self.pack()
@@ -534,7 +548,8 @@ class App(Frame):
         self.entry_top      = ttk.Entry         (self.frame_menu, state='disabled')
         self.label_bottom   = ttk.Label         (self.frame_menu, text='Longitude - Bottom',    foreground='grey')
         self.entry_bottom   = ttk.Entry         (self.frame_menu, state='disabled')
-        self.export         = ttk.Button        (self.frame_menu, text='Export to CSV',     command=self.export_to_csv)
+        self.btn_export     = ttk.Button        (self.frame_menu, text='Export to CSV',     command=self.export_to_csv)
+        self.btn_breakpoint = ttk.Button        (self.frame_menu, text='Breakpoint',        command=self.trigger_breakpoint)
 
         # Status frame
         self.label_status   = ttk.Label         (self.frame_status, text='Open an image')
@@ -560,7 +575,8 @@ class App(Frame):
         self.entry_top      .grid(row=10,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
         self.label_bottom   .grid(row=11,   column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
         self.entry_bottom   .grid(row=12,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
-        self.export         .grid(row=13,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.btn_export     .grid(row=13,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.btn_breakpoint .grid(row=14,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
 
         # Gridding - status frame
         self.label_status   .grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
