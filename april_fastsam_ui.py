@@ -549,7 +549,7 @@ class App(Frame):
         self.label_bottom   = ttk.Label         (self.frame_menu, text='Longitude - Bottom',    foreground='grey')
         self.entry_bottom   = ttk.Entry         (self.frame_menu, state='disabled')
         self.btn_export     = ttk.Button        (self.frame_menu, text='Export to CSV',     command=self.export_to_csv)
-        self.btn_breakpoint = ttk.Button        (self.frame_menu, text='Breakpoint',        command=self.trigger_breakpoint)
+        #self.btn_breakpoint = ttk.Button        (self.frame_menu, text='Breakpoint',        command=self.trigger_breakpoint)
 
         # Status frame
         self.label_status   = ttk.Label         (self.frame_status, text='Open an image')
@@ -576,7 +576,7 @@ class App(Frame):
         self.label_bottom   .grid(row=11,   column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
         self.entry_bottom   .grid(row=12,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
         self.btn_export     .grid(row=13,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
-        self.btn_breakpoint .grid(row=14,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        #self.btn_breakpoint .grid(row=14,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
 
         # Gridding - status frame
         self.label_status   .grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
