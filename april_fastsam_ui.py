@@ -147,7 +147,7 @@ class App(Frame):
         self.print_debug(f'Drag start! ({event.x}, {event.y})')
 
     def point_drag_motion(self, event):
-        """ Drag a point in the contour that is currently being edited. """
+        """ Drag a point around inside the contour that is currently being edited. """
         dx = event.x - self._prev_x
         dy = event.y - self._prev_y
 
@@ -293,8 +293,12 @@ class App(Frame):
         # Check if we clicked on a point
         for i, point in enumerate(self.segment_contour):
 
+            # Points can be clicked on the edge where they are outside the point radius,
+            #   so a fudge factor is used in the radius comparison to extend it.
+            radius_fudge = 3
+
             # L2 norm to calculate Euclidean distance between the click and contour point
-            if cv2.norm(src1=np.array([[x,y]]), src2=point, normType=cv2.NORM_L2) < self.contour_point_radius:
+            if cv2.norm(src1=np.array([[x,y]]), src2=point, normType=cv2.NORM_L2) < (self.contour_point_radius + radius_fudge):
                 selected_point = point
                 point_index = i
                 
