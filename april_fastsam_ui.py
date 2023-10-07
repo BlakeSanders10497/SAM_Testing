@@ -32,6 +32,8 @@ import numpy as np
 from PIL import ImageTk, Image
 from fastsam import FastSAM, FastSAMVideoPrompt
 
+from utils.path_planner_2023 import *
+
 # create_circle function addition to tkinter
 # Source: https://stackoverflow.com/questions/17985216/simpler-way-to-draw-a-circle-with-tkinter
 def _create_circle(self, x, y, r, **kwargs):
@@ -72,11 +74,12 @@ class App(ttk.Frame):
         self.__label_bottom   .config(foreground='grey')
 
     def __enable_img_options(self):
-        """ Enable UI checkboxes and edit label. """
+        """ Enable UI options related to editing and using the selected water body edge. """
 
         self.__check_polygon  .config(state='enabled')
         self.__check_latlong  .config(state='enabled')
         self.__btn_export     .config(state='enabled')
+        self.__btn_path       .config(state='enabled')
 
         self.__label_edit     .config(foreground='black')
 
@@ -500,15 +503,15 @@ class App(ttk.Frame):
         except ValueError:
             print('latitude bottom is invalid.')
             return False
-        
+
         return True
-    
+
     def __export_to_csv(self):
         """ Exports the selected segment's polygon as lat-long points to a CSV file. """
 
         if not self.__validate_entry_inputs():
             return
-        
+
         self.__print_debug('exporting!')
 
         # Generate lat/long points
@@ -523,6 +526,21 @@ class App(ttk.Frame):
                 writer.writerow([point[1], point[0]])
 
         print(f'Export to {args.output_filename} complete.')
+
+    def __generate_path(self):
+        """ Generates and renders a path returned by the path planner. """
+
+        # Create separate lists of x and y coordinates from bounding contour points
+        x_coords = [point[0][0] for point in self.__segment_contour]
+        y_coords = [point[0][1] for point in self.__segment_contour]
+
+        # Generate a path
+        waypoint_coords = fullPath(x_coords, y_coords)
+
+        breakpoint()
+
+        # Draw the path
+        self.__img_canvas.create_line(waypoint_coords, fill='red', width=2)
 
     def __init__(self, root):
         ttk.Frame.__init__(self, root)
@@ -572,6 +590,7 @@ class App(ttk.Frame):
         self.__label_bottom   = ttk.Label       (self.__frame_menu, text='Longitude - Bottom',    foreground='grey')
         self.__entry_bottom   = ttk.Entry       (self.__frame_menu, state='disabled')
         self.__btn_export     = ttk.Button      (self.__frame_menu, text='Export to CSV',     command=self.__export_to_csv)
+        self.__btn_path       = ttk.Button      (self.__frame_menu, text='Generate Path',     command=self.__generate_path, state='disabled') 
 
         # Status frame
         self.__label_status   = ttk.Label       (self.__frame_status, text='Open an image')
@@ -598,6 +617,7 @@ class App(ttk.Frame):
         self.__label_bottom   .grid(row=11,   column=0, padx=menu_padx, pady=menu_pady_short, sticky='nsew')
         self.__entry_bottom   .grid(row=12,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
         self.__btn_export     .grid(row=13,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
+        self.__btn_path       .grid(row=14,   column=0, padx=menu_padx, pady=menu_pady_long,  sticky='nsew')
 
         # Gridding - status frame
         self.__label_status   .grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
@@ -618,7 +638,6 @@ class App(ttk.Frame):
         # Trigger UI update for initial state
         self.__update_state(self.__app_state)
 
-    
 
 def parse_args():
     """ Use an ArgumentParser to collect arguments into variables. """
