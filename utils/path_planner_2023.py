@@ -17,8 +17,8 @@ from shapely.prepared import prep
 
 
 def fullPath(xIm, yIm):
-    print(xIm)
-    print(yIm)
+    #print(xIm)
+    #print(yIm)
     polygonToPath = list(zip(xIm, yIm))
     
     pathDist = abs((max(xIm) - min(xIm))/15)
@@ -30,11 +30,11 @@ def fullPath(xIm, yIm):
     polyCoords = poly.get_coordinates()
     polyCoordsList = list(polyCoords.itertuples(index=False, name=None))
     pTest = makeConvex(polyCoordsList, tol, poly)
-    
+
     pathDistOrig = pathDist
 
     testPathArr = []
-    print(testPathArr)
+    #print(testPathArr)
     for i in range(len(pTest)):
         x1, y1 = zip(*pTest[i])
         #pathDist = abs((max(x1) - min(x1))/15)
@@ -65,7 +65,7 @@ def fullPath(xIm, yIm):
                         #finalPath.append([testPathArr[i][j][0], finalPath[len(finalPath)-2][1]])
                         finalPath.append(testPathArr[i][j])
                 x2, y2 = zip(*testPathArr[i+1])
-    print(finalPath)
+    #print(finalPath)
     xList, yList = zip(*finalPath)
 
     waypoint_coords = []
@@ -216,7 +216,7 @@ def generatePath(polygonToPath, pathDist):
             if minTurns > numTurns:
                 minTurns = numTurns
 
-            print("iter\n")
+           #print("iter\n")
         else:
             bestPL = 0
             chosenPath = []
