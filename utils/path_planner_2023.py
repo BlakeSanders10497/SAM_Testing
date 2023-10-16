@@ -12,10 +12,13 @@ import csv
 import pandas as pd
 from scipy.spatial import ConvexHull
 from shapely.geometry import Polygon
+from shapely.geometry import Point
 from shapely.prepared import prep
 
 
 def fullPath(xIm, yIm):
+    print(xIm)
+    print(yIm)
     polygonToPath = list(zip(xIm, yIm))
     
     pathDist = abs((max(xIm) - min(xIm))/15)
@@ -27,34 +30,42 @@ def fullPath(xIm, yIm):
     polyCoords = poly.get_coordinates()
     polyCoordsList = list(polyCoords.itertuples(index=False, name=None))
     pTest = makeConvex(polyCoordsList, tol, poly)
+    
     pathDistOrig = pathDist
 
     testPathArr = []
-
+    print(testPathArr)
     for i in range(len(pTest)):
         x1, y1 = zip(*pTest[i])
         #pathDist = abs((max(x1) - min(x1))/15)
         #Maximum area heuristic
         maxArea = (max(x1)-min(x1))*(max(y1)-min(y1))
         if (maxArea > (5*pathDistOrig*pathDistOrig)):
-            genPath = generatePath(pTest[i], pathDist)
+            genPath = generatePath(pTest[i], pathDist/3.5)
             if (len(genPath[0]) > 2):
                 testPathArr.append(genPath[0])
                 #pathLengthTot += genPath[1]
                 
     finalPath = []
-    for i in range(len(testPathArr)):
-         x1, y1 = zip(*testPathArr[i])
-         if (i == len(testPathArr)-1):
-            for j in range(len(testPathArr[i])):
-                finalPath.append([testPathArr[i][j][0], finalPath[len(finalPath)-1][1]])
-                finalPath.append(testPathArr[i][j])
-         else:
-            for j in range(len(testPathArr[i])):
-                    #finalPath.append([testPathArr[i][j][0], finalPath[len(finalPath)-2][1]])
-                    finalPath.append(testPathArr[i][j])
-            x2, y2 = zip(*testPathArr[i+1])
+    #print(testPathArr[0])
 
+    if (len(testPathArr) == 1):
+        #print("triggered")
+        for j in range(len(testPathArr[0])):
+            finalPath.append(testPathArr[0][j])
+    else:
+        for i in range(len(testPathArr)):
+            x1, y1 = zip(*testPathArr[i])
+            if (i == len(testPathArr)-1):
+                for j in range(len(testPathArr[i])):
+                    #finalPath.append([testPathArr[i][j][0], finalPath[len(finalPath)-1][1]])
+                    finalPath.append(testPathArr[i][j])
+            else:
+                for j in range(len(testPathArr[i])):
+                        #finalPath.append([testPathArr[i][j][0], finalPath[len(finalPath)-2][1]])
+                        finalPath.append(testPathArr[i][j])
+                x2, y2 = zip(*testPathArr[i+1])
+    print(finalPath)
     xList, yList = zip(*finalPath)
 
     waypoint_coords = []
@@ -84,7 +95,7 @@ def generatePath(polygonToPath, pathDist):
     savedPL = 100000
     
     #instead of gridding, test with linear distance to refine (max linear dist)
-    for testAngle in range(0, 180, 30):
+    for testAngle in range(0, 180, 10):
         polygonToPathRotated =  []      
 
         #rotation matrix
@@ -192,17 +203,20 @@ def generatePath(polygonToPath, pathDist):
             currC = 0.001*currPL + c2*numTurns
             pathLengths.append(totalLength)   
 
-            if lc > currC:
+            if numTurns < minTurns:
                 chosenPath = path
                 lc = currC
                 savedPL = currPL
-                savedNumTurns = numTurns
+                minTurns = numTurns
+                
             
             if bestPL > currPL:
                 bestPL = currPL
 
             if minTurns > numTurns:
                 minTurns = numTurns
+
+            print("iter\n")
         else:
             bestPL = 0
             chosenPath = []
