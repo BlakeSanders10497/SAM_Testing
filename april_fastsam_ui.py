@@ -125,7 +125,8 @@ class App(ttk.Frame):
     def __on_left_mouse_button(self, event):
         """ Event handler to be triggered by pressing the left mouse button. """
 
-        if self.__app_state == AppState.CONTOUR_SELECT:
+        if (self.__app_state == AppState.CONTOUR_SELECT or
+            self.__app_state == AppState.CONTOUR_EDIT):
             # Check if we clicked on a segment
             segment_contour_full = self.__check_for_segment(event.x, event.y)
             if segment_contour_full is None:
@@ -143,11 +144,6 @@ class App(ttk.Frame):
             self.__redraw_contour()
 
             self.__update_state(AppState.CONTOUR_EDIT)
-
-        elif self.__app_state == AppState.CONTOUR_EDIT:
-            # Make sure we are actively editing the polygon
-            if not self.__allow_edit_polygon.get():
-                return
 
     def __point_drag_start(self, event):
         """ Start dragging a point in the contour that is currently being edited. """
@@ -204,13 +200,28 @@ class App(ttk.Frame):
         if self.__allow_edit_polygon.get():
             self.__redraw_contour_points()
 
+        # If we are editing latlong bounds, redraw the bound points
+        if self.__allow_edit_latlong.get():
+            self.__redraw_latlong_points()
+
+
     def __redraw_contour_points(self):
+        """ Delete old contour points and redraw new ones. """
+        # Clear old points
         self.__img_canvas.delete(self.__contour_points_tag)
 
         # Draw the contour points
         for point in self.__segment_contour:
             self.__img_canvas.create_circle(x=point[0][0], y=point[0][1], r=self.__contour_point_r,
                     fill='blue', outline='white', tags=self.__contour_points_tag)
+
+    def __redraw_latlong_points(self):
+        """ Delete old latlong bound points and redraw new ones. """
+        # Clear old points
+        self.__img_canvas.delete(self.__contour_bounds_tag)
+
+        # Draw new points
+        self.__draw_bound_points()
 
     def __browse_files(self):
         """ Spawn a file browser from which the user can select an image. """
@@ -228,7 +239,11 @@ class App(ttk.Frame):
             # Update the image
             self.__img = img
             self.__tk_img = ImageTk.PhotoImage(img)
-            
+
+            # Clear all drawn shapes from canvas
+            self.__img_canvas.delete('all')
+
+            # Draw the new image
             self.__update_canvas_image()
 
             self.__update_state(AppState.IMAGE_SEGMENT)
@@ -536,8 +551,6 @@ class App(ttk.Frame):
 
         # Generate a path
         waypoint_coords = fullPath(x_coords, y_coords)
-
-        breakpoint()
 
         # Draw the path
         self.__img_canvas.create_line(waypoint_coords, fill='red', width=2)
