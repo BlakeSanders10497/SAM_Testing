@@ -255,7 +255,7 @@ class App(ttk.Frame):
 
         # Add image to canvas
         self.__img_canvas.create_image(0, 0, anchor="nw", image=self.__tk_img)
-        
+
     def __segment(self):
         """ Begin segmentation on the selected image. """
 
@@ -293,11 +293,15 @@ class App(ttk.Frame):
             annotations=annotations,
             mask_random_color=args.random_color)
 
+        num_segments = len(self.__segment_contour_list)
+
+        print(f'{"Warning: " if num_segments == 0 else ""}Segmentation found {num_segments} segments.')
+
         # Display output image
         self.__tk_img = ImageTk.PhotoImage(Image.fromarray(result))
 
         self.__update_canvas_image()
-        
+
         self.__update_state(AppState.CONTOUR_SELECT)
 
         self.__print_debug('Segmentation complete.')
