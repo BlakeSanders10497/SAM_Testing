@@ -129,8 +129,11 @@ class App(ttk.Frame):
             self.__app_state == AppState.CONTOUR_EDIT):
             # Check if we clicked on a segment
             segment_contour_full = self.__check_for_segment(event.x, event.y)
-            if segment_contour_full is None:
+            if segment_contour_full is None or self.__last_clicked_segment is segment_contour_full:
                 return
+
+
+            self.__last_clicked_segment = segment_contour_full
 
             # Simplify contour before drawing and storing
             # Reference: https://stackoverflow.com/questions/41879315/opencv-visualize-polygonal-curves-extracted-with-cv2-approxpolydp
@@ -576,8 +579,10 @@ class App(ttk.Frame):
         # State variables
         self.__app_state = AppState(AppState.IMAGE_SELECT)
 
-        self.__allow_edit_polygon    = tk.BooleanVar(value=False)
-        self.__allow_edit_latlong = tk.BooleanVar(value=False)
+        self.__allow_edit_polygon   = tk.BooleanVar(value=False)
+        self.__allow_edit_latlong   = tk.BooleanVar(value=False)
+
+        self.__last_clicked_segment = None
 
         # High-level frames
         self.__frame_menu     = ttk.Frame(self)
